@@ -33,20 +33,21 @@ function LoginForm() {
   };
 
   return (
-    <main className="max-w-sm mx-auto px-4 py-24">
-      <h1 className="text-2xl font-bold text-gray-900 mb-2 text-center">
+    <main className="max-w-sm mx-auto px-4 py-16 sm:py-24 min-h-screen flex flex-col justify-center">
+      <h1 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2 text-center">
         Leroy Merlin → Notion
       </h1>
-      <p className="text-gray-500 mb-8 text-center">Entrez le code d&apos;accès</p>
+      <p className="text-gray-500 mb-8 text-center text-sm sm:text-base">Entrez le code d&apos;accès</p>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <input
           type="password"
+          inputMode="text"
           value={code}
           onChange={(e) => setCode(e.target.value)}
           placeholder="Code d'accès"
           autoFocus
-          className="w-full border rounded-lg px-3 py-2 text-sm"
+          className="w-full border rounded-lg px-3 py-3 sm:py-2 text-base sm:text-sm"
         />
 
         {error && (

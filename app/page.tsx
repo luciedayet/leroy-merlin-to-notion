@@ -76,16 +76,16 @@ export default function Home() {
   };
 
   return (
-    <main className="max-w-4xl mx-auto px-4 py-10">
-      <h1 className="text-3xl font-bold text-gray-900 mb-2">
+    <main className="max-w-4xl mx-auto px-4 py-6 sm:py-10">
+      <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">
         Leroy Merlin → Notion
       </h1>
-      <p className="text-gray-500 mb-8">
+      <p className="text-gray-500 text-sm sm:text-base mb-6 sm:mb-8">
         Importez les articles d&apos;une facture PDF dans votre base Notion
       </p>
 
       <div
-        className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-colors ${
+        className={`border-2 border-dashed rounded-xl p-6 sm:p-10 text-center cursor-pointer transition-colors active:bg-green-50 ${
           dragOver
             ? "border-green-500 bg-green-50"
             : "border-gray-300 hover:border-green-400 hover:bg-green-50/50"
@@ -113,12 +113,12 @@ export default function Home() {
           <div className="text-green-600 font-medium">Analyse en cours...</div>
         ) : (
           <>
-            <div className="text-4xl mb-3">📄</div>
+            <div className="text-3xl sm:text-4xl mb-3">📄</div>
             <div className="text-gray-600 font-medium">
-              Déposez votre facture PDF ici
+              Sélectionnez votre facture PDF
             </div>
-            <div className="text-gray-400 text-sm mt-1">
-              ou cliquez pour sélectionner
+            <div className="text-gray-400 text-sm mt-1 hidden sm:block">
+              ou glissez-déposez ici
             </div>
           </>
         )}
@@ -137,29 +137,29 @@ export default function Home() {
       )}
 
       {facture && (
-        <div className="mt-8 space-y-6">
-          <div className="bg-white rounded-xl shadow-sm border p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-3">
+        <div className="mt-6 sm:mt-8 space-y-4 sm:space-y-6">
+          <div className="bg-white rounded-xl shadow-sm border p-4 sm:p-6">
+            <h2 className="text-base sm:text-lg font-semibold text-gray-900 mb-3">
               Facture N° {facture.numero}
             </h2>
-            <div className="grid grid-cols-3 gap-4 text-sm">
+            <div className="grid grid-cols-3 gap-2 sm:gap-4 text-xs sm:text-sm">
               <div>
                 <span className="text-gray-500">Date</span>
                 <div className="font-medium">{formatDate(facture.dateVente)}</div>
               </div>
               <div>
                 <span className="text-gray-500">Magasin</span>
-                <div className="font-medium">{facture.magasin}</div>
+                <div className="font-medium truncate">{facture.magasin}</div>
               </div>
               <div>
                 <span className="text-gray-500">Total TTC</span>
-                <div className="font-medium text-lg">{facture.totalTTC.toFixed(2)} €</div>
+                <div className="font-medium text-sm sm:text-lg">{facture.totalTTC.toFixed(2)} €</div>
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Options</h2>
+          <div className="bg-white rounded-xl shadow-sm border p-4 sm:p-6">
+            <h2 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Options</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Payeur</label>
@@ -208,7 +208,31 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+          <div className="bg-white rounded-xl shadow-sm border divide-y sm:hidden">
+            {facture.articles.map((a: Article, i: number) => (
+              <div key={i} className="p-4">
+                <div className="flex justify-between items-start gap-3">
+                  <div className="min-w-0">
+                    <div className="font-medium text-sm truncate">{a.designation}</div>
+                    <div className="text-xs text-gray-400 font-mono mt-0.5">{a.ref}</div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="font-medium text-sm">{a.totalTTC.toFixed(2)} €</div>
+                    <div className="text-xs text-gray-400">{a.quantite} × {a.prixUnitaireTTC.toFixed(2)} €</div>
+                  </div>
+                </div>
+                <span className="inline-block mt-2 px-2 py-0.5 bg-gray-100 rounded text-xs text-gray-600">
+                  {a.categorie}
+                </span>
+              </div>
+            ))}
+            <div className="p-4 flex justify-between items-center bg-gray-50">
+              <span className="font-medium text-sm">Total TTC</span>
+              <span className="font-bold">{facture.totalTTC.toFixed(2)} €</span>
+            </div>
+          </div>
+
+          <div className="hidden sm:block bg-white rounded-xl shadow-sm border overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b">
@@ -252,7 +276,7 @@ export default function Home() {
           <button
             onClick={handleImport}
             disabled={importing}
-            className="w-full py-3 bg-green-600 hover:bg-green-700 disabled:bg-green-300 text-white font-medium rounded-xl transition-colors"
+            className="w-full py-3.5 sm:py-3 bg-green-600 hover:bg-green-700 disabled:bg-green-300 text-white font-medium rounded-xl transition-colors"
           >
             {importing
               ? "Import en cours..."
