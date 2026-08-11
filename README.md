@@ -9,6 +9,7 @@ Deployable sur Vercel.
 2. Ajouter les variables d'environnement :
    - `NOTION_API_KEY` : cle d'integration Notion
    - `NOTION_DATABASE_ID` : `373aea3aab0380f0a304e52452c9266d`
+   - `ACCESS_CODE` : code d'acces demande avant d'afficher l'app (si absent, l'authentification est desactivee)
 3. Deployer
 
 ## Configuration Notion
