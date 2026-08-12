@@ -1,25 +1,24 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef, Fragment } from "react";
-import type { Article, DriveFile, Facture } from "@/lib/types";
-import { PAYEURS, PIECES, POSTES } from "@/lib/types";
-import { buildArticleFields } from "@/lib/notionFields";
+import { useState, useCallback, useEffect, useRef } from "react";
+import type { DriveFile, Facture } from "@/lib/types";
+import { PAYEURS } from "@/lib/types";
 
 export default function Home() {
   const [facture, setFacture] = useState<Facture | null>(null);
   const [loading, setLoading] = useState(false);
-  const [importing, setImporting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [numero, setNumero] = useState("");
+  const [dateVente, setDateVente] = useState("");
+  const [magasin, setMagasin] = useState("");
   const [payeur, setPayeur] = useState("");
-  const [piece, setPiece] = useState("");
-  const [postes, setPostes] = useState<string[]>([]);
+  const [remboursed, setRemboursed] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [driveFiles, setDriveFiles] = useState<DriveFile[]>([]);
   const [driveLoading, setDriveLoading] = useState(true);
   const [driveError, setDriveError] = useState("");
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
-  const [expandedArticle, setExpandedArticle] = useState<number | null>(null);
   const requestIdRef = useRef(0);
 
   useEffect(() => {
@@ -32,6 +31,15 @@ export default function Home() {
       .catch((e: unknown) => setDriveError(e instanceof Error ? e.message : "Erreur Drive"))
       .finally(() => setDriveLoading(false));
   }, []);
+
+  const applyFacture = (data: Facture) => {
+    setFacture(data);
+    setNumero(data.numero);
+    setDateVente(data.dateVente);
+    setMagasin(data.magasin);
+    setPayeur("");
+    setRemboursed(false);
+  };
 
   const handleFile = useCallback(async (file: File) => {
     const id = ++requestIdRef.current;
@@ -48,7 +56,7 @@ export default function Home() {
       const res = await fetch("/api/parse", { method: "POST", body: formData });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      if (requestIdRef.current === id) setFacture(data);
+      if (requestIdRef.current === id) applyFacture(data);
     } catch (e: unknown) {
       if (requestIdRef.current === id) setError(e instanceof Error ? e.message : "Erreur inconnue");
     } finally {
@@ -72,7 +80,7 @@ export default function Home() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      if (requestIdRef.current === id) setFacture(data);
+      if (requestIdRef.current === id) applyFacture(data);
     } catch (e: unknown) {
       if (requestIdRef.current === id) setError(e instanceof Error ? e.message : "Erreur inconnue");
     } finally {
@@ -88,50 +96,12 @@ export default function Home() {
     setLoading(false);
     setError("");
     setSuccess("");
+    setNumero("");
+    setDateVente("");
+    setMagasin("");
     setPayeur("");
-    setPiece("");
-    setPostes([]);
-    setExpandedArticle(null);
+    setRemboursed(false);
   }, [pdfUrl]);
-
-  const handleImport = async () => {
-    if (!facture) return;
-    setImporting(true);
-    setError("");
-    setSuccess("");
-
-    try {
-      const res = await fetch("/api/import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          facture: { numero: facture.numero, dateVente: facture.dateVente },
-          articles: facture.articles,
-          payeur: payeur || undefined,
-          piece: piece || undefined,
-          postes: postes.length ? postes : undefined,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setSuccess(`${data.count} article(s) importé(s) dans Notion !`);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Erreur inconnue");
-    } finally {
-      setImporting(false);
-    }
-  };
-
-  const togglePoste = (poste: string) => {
-    setPostes((prev) =>
-      prev.includes(poste) ? prev.filter((p) => p !== poste) : [...prev, poste],
-    );
-  };
-
-  const formatDate = (iso: string) => {
-    const [y, m, d] = iso.split("-");
-    return `${d}/${m}/${y}`;
-  };
 
   const formatDriveDate = (iso: string) => {
     const d = new Date(iso);
@@ -242,206 +212,70 @@ export default function Home() {
               {success}
             </div>
           )}
-        </div>
-      )}
 
-      {facture && (
-        <div className="mt-4 sm:mt-6 space-y-4 sm:space-y-6">
-          <div className="bg-white rounded-xl shadow-sm border p-4 sm:p-6">
-            <h2 className="text-base sm:text-lg font-semibold text-gray-900 mb-3">
-              Facture N° {facture.numero}
-            </h2>
-            <div className="grid grid-cols-3 gap-2 sm:gap-4 text-xs sm:text-sm">
-              <div>
-                <span className="text-gray-500">Date</span>
-                <div className="font-medium">{formatDate(facture.dateVente)}</div>
-              </div>
-              <div>
-                <span className="text-gray-500">Magasin</span>
-                <div className="font-medium truncate">{facture.magasin}</div>
-              </div>
-              <div>
-                <span className="text-gray-500">Total TTC</span>
-                <div className="font-medium text-sm sm:text-lg">{facture.totalTTC.toFixed(2)} €</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-sm border p-4 sm:p-6">
-            <h2 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Options</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Payeur</label>
-                <select
-                  value={payeur}
-                  onChange={(e) => setPayeur(e.target.value)}
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                >
-                  <option value="">— Non défini —</option>
-                  {PAYEURS.map((p) => (
-                    <option key={p} value={p}>{p}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Pièce</label>
-                <select
-                  value={piece}
-                  onChange={(e) => setPiece(e.target.value)}
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                >
-                  <option value="">— Non défini —</option>
-                  {PIECES.map((p) => (
-                    <option key={p} value={p}>{p}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Poste(s)</label>
-                <div className="flex flex-wrap gap-2">
-                  {POSTES.map((p) => (
-                    <button
-                      key={p}
-                      onClick={() => togglePoste(p)}
-                      className={`px-3 py-1 rounded-full text-sm border transition-colors ${
-                        postes.includes(p)
-                          ? "bg-green-100 border-green-400 text-green-800"
-                          : "bg-white border-gray-300 text-gray-600 hover:border-green-300"
-                      }`}
-                    >
-                      {p}
-                    </button>
-                  ))}
+          {facture && (
+            <div className="bg-white rounded-xl shadow-sm border p-4 sm:p-6">
+              <h2 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">
+                Informations de la facture
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Numéro de facture
+                  </label>
+                  <input
+                    type="text"
+                    value={numero}
+                    onChange={(e) => setNumero(e.target.value)}
+                    className="w-full border rounded-lg px-3 py-2 text-base sm:text-sm"
+                  />
                 </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-sm border divide-y sm:hidden">
-            {facture.articles.map((a: Article, i: number) => (
-              <div key={i}>
-                <div
-                  className="p-4 cursor-pointer active:bg-gray-50"
-                  onClick={() => setExpandedArticle(expandedArticle === i ? null : i)}
-                >
-                  <div className="flex justify-between items-start gap-3">
-                    <div className="min-w-0">
-                      <div className="font-medium text-sm truncate">{a.designation}</div>
-                      <div className="text-xs text-gray-400 font-mono mt-0.5">{a.ref}</div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <div className="font-medium text-sm">{a.totalTTC.toFixed(2)} €</div>
-                      <div className="text-xs text-gray-400">{a.quantite} × {a.prixUnitaireTTC.toFixed(2)} €</div>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between mt-2">
-                    <span className="inline-block px-2 py-0.5 bg-gray-100 rounded text-xs text-gray-600">
-                      {a.categorie}
-                    </span>
-                    <span className="text-gray-400 text-xs">
-                      {expandedArticle === i ? "Masquer les propriétés Notion ▴" : "Voir les propriétés Notion ▾"}
-                    </span>
-                  </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                  <input
+                    type="date"
+                    value={dateVente}
+                    onChange={(e) => setDateVente(e.target.value)}
+                    className="w-full border rounded-lg px-3 py-2 text-base sm:text-sm"
+                  />
                 </div>
-                {expandedArticle === i && facture && (
-                  <div className="px-4 pb-4 grid grid-cols-2 gap-x-4 gap-y-2 text-xs bg-gray-50">
-                    {buildArticleFields(
-                      a,
-                      { numero: facture.numero, dateVente: facture.dateVente },
-                      { payeur: payeur || undefined, piece: piece || undefined, postes: postes.length ? postes : undefined },
-                    ).map((f) => (
-                      <div key={f.label}>
-                        <div className="text-gray-400">{f.label}</div>
-                        <div className="text-gray-700 font-medium truncate">{f.displayValue}</div>
-                      </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Magasin</label>
+                  <input
+                    type="text"
+                    value={magasin}
+                    onChange={(e) => setMagasin(e.target.value)}
+                    className="w-full border rounded-lg px-3 py-2 text-base sm:text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Payeur</label>
+                  <select
+                    value={payeur}
+                    onChange={(e) => setPayeur(e.target.value)}
+                    className="w-full border rounded-lg px-3 py-2 text-base sm:text-sm"
+                  >
+                    <option value="">— Non défini —</option>
+                    {PAYEURS.map((p) => (
+                      <option key={p} value={p}>{p}</option>
                     ))}
-                  </div>
-                )}
+                  </select>
+                </div>
+                <div className="flex items-center gap-2 sm:col-span-2">
+                  <input
+                    id="rembourse"
+                    type="checkbox"
+                    checked={remboursed}
+                    onChange={(e) => setRemboursed(e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-300"
+                  />
+                  <label htmlFor="rembourse" className="text-sm font-medium text-gray-700">
+                    Remboursé
+                  </label>
+                </div>
               </div>
-            ))}
-            <div className="p-4 flex justify-between items-center bg-gray-50">
-              <span className="font-medium text-sm">Total TTC</span>
-              <span className="font-bold">{facture.totalTTC.toFixed(2)} €</span>
             </div>
-          </div>
-
-          <div className="hidden sm:block bg-white rounded-xl shadow-sm border overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b">
-                  <tr>
-                    <th className="w-8 px-4 py-3"></th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-500">N°</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-500">Réf</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-500">Désignation</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-500">Catégorie</th>
-                    <th className="text-right px-4 py-3 font-medium text-gray-500">Prix unit.</th>
-                    <th className="text-right px-4 py-3 font-medium text-gray-500">Qté</th>
-                    <th className="text-right px-4 py-3 font-medium text-gray-500">Total</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {facture.articles.map((a: Article, i: number) => (
-                    <Fragment key={i}>
-                      <tr
-                        className="hover:bg-gray-50 cursor-pointer"
-                        onClick={() => setExpandedArticle(expandedArticle === i ? null : i)}
-                      >
-                        <td className="px-4 py-3 text-gray-400 text-center">
-                          {expandedArticle === i ? "▴" : "▾"}
-                        </td>
-                        <td className="px-4 py-3 text-gray-400">{i + 1}</td>
-                        <td className="px-4 py-3 font-mono text-xs">{a.ref}</td>
-                        <td className="px-4 py-3 font-medium">{a.designation}</td>
-                        <td className="px-4 py-3">
-                          <span className="px-2 py-0.5 bg-gray-100 rounded text-xs text-gray-600">
-                            {a.categorie}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right">{a.prixUnitaireTTC.toFixed(2)} €</td>
-                        <td className="px-4 py-3 text-right">{a.quantite}</td>
-                        <td className="px-4 py-3 text-right font-medium">{a.totalTTC.toFixed(2)} €</td>
-                      </tr>
-                      {expandedArticle === i && facture && (
-                        <tr className="bg-gray-50">
-                          <td colSpan={8} className="px-4 py-4">
-                            <div className="grid grid-cols-4 gap-x-6 gap-y-3 text-xs">
-                              {buildArticleFields(
-                                a,
-                                { numero: facture.numero, dateVente: facture.dateVente },
-                                { payeur: payeur || undefined, piece: piece || undefined, postes: postes.length ? postes : undefined },
-                              ).map((f) => (
-                                <div key={f.label}>
-                                  <div className="text-gray-400">{f.label}</div>
-                                  <div className="text-gray-700 font-medium truncate">{f.displayValue}</div>
-                                </div>
-                              ))}
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
-                  ))}
-                </tbody>
-                <tfoot className="bg-gray-50 border-t">
-                  <tr>
-                    <td colSpan={7} className="px-4 py-3 text-right font-medium">Total TTC</td>
-                    <td className="px-4 py-3 text-right font-bold">{facture.totalTTC.toFixed(2)} €</td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          </div>
-
-          <button
-            onClick={handleImport}
-            disabled={importing}
-            className="w-full py-3.5 sm:py-3 bg-green-600 hover:bg-green-700 disabled:bg-green-300 text-white font-medium rounded-xl transition-colors"
-          >
-            {importing
-              ? "Import en cours..."
-              : `Importer ${facture.articles.length} article(s) dans Notion`}
-          </button>
+          )}
         </div>
       )}
     </main>
