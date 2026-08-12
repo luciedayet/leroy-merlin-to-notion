@@ -1,5 +1,6 @@
 import { Client } from "@notionhq/client";
 import type { Article } from "./types";
+import { buildArticleFields } from "./notionFields";
 
 export async function importArticles(
   articles: Article[],
@@ -17,29 +18,8 @@ export async function importArticles(
   let count = 0;
 
   for (const article of articles) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const properties: Record<string, any> = {
-      Nom: { title: [{ text: { content: article.designation } }] },
-      "Ref produit": { number: article.ref },
-      "Prix unitaire": { number: article.prixUnitaireTTC },
-      "Quantité": { number: article.quantite },
-      Magasin: { select: { name: "Leroy Merlin" } },
-      Facture: { rich_text: [{ text: { content: facture.numero } }] },
-      Achat: { date: { start: facture.dateVente } },
-      "Remboursé": { checkbox: false },
-    };
-
-    if (options.payeur) {
-      properties["Payeur"] = { select: { name: options.payeur } };
-    }
-    if (options.piece) {
-      properties["Pièce"] = { select: { name: options.piece } };
-    }
-    if (options.postes?.length) {
-      properties["Poste"] = {
-        multi_select: options.postes.map((p) => ({ name: p })),
-      };
-    }
+    const fields = buildArticleFields(article, facture, options);
+    const properties = Object.fromEntries(fields.map((f) => [f.label, f.property]));
 
     await notion.pages.create({
       parent: { database_id: databaseId },

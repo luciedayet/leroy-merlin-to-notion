@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, Fragment } from "react";
 import type { Article, DriveFile, Facture } from "@/lib/types";
 import { PAYEURS, PIECES, POSTES } from "@/lib/types";
+import { buildArticleFields } from "@/lib/notionFields";
 
 export default function Home() {
   const [facture, setFacture] = useState<Facture | null>(null);
@@ -18,6 +19,7 @@ export default function Home() {
   const [driveLoading, setDriveLoading] = useState(true);
   const [driveError, setDriveError] = useState("");
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [expandedArticle, setExpandedArticle] = useState<number | null>(null);
   const requestIdRef = useRef(0);
 
   useEffect(() => {
@@ -89,6 +91,7 @@ export default function Home() {
     setPayeur("");
     setPiece("");
     setPostes([]);
+    setExpandedArticle(null);
   }, [pdfUrl]);
 
   const handleImport = async () => {
@@ -316,20 +319,44 @@ export default function Home() {
 
           <div className="bg-white rounded-xl shadow-sm border divide-y sm:hidden">
             {facture.articles.map((a: Article, i: number) => (
-              <div key={i} className="p-4">
-                <div className="flex justify-between items-start gap-3">
-                  <div className="min-w-0">
-                    <div className="font-medium text-sm truncate">{a.designation}</div>
-                    <div className="text-xs text-gray-400 font-mono mt-0.5">{a.ref}</div>
+              <div key={i}>
+                <div
+                  className="p-4 cursor-pointer active:bg-gray-50"
+                  onClick={() => setExpandedArticle(expandedArticle === i ? null : i)}
+                >
+                  <div className="flex justify-between items-start gap-3">
+                    <div className="min-w-0">
+                      <div className="font-medium text-sm truncate">{a.designation}</div>
+                      <div className="text-xs text-gray-400 font-mono mt-0.5">{a.ref}</div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="font-medium text-sm">{a.totalTTC.toFixed(2)} €</div>
+                      <div className="text-xs text-gray-400">{a.quantite} × {a.prixUnitaireTTC.toFixed(2)} €</div>
+                    </div>
                   </div>
-                  <div className="text-right shrink-0">
-                    <div className="font-medium text-sm">{a.totalTTC.toFixed(2)} €</div>
-                    <div className="text-xs text-gray-400">{a.quantite} × {a.prixUnitaireTTC.toFixed(2)} €</div>
+                  <div className="flex items-center justify-between mt-2">
+                    <span className="inline-block px-2 py-0.5 bg-gray-100 rounded text-xs text-gray-600">
+                      {a.categorie}
+                    </span>
+                    <span className="text-gray-400 text-xs">
+                      {expandedArticle === i ? "Masquer les propriétés Notion ▴" : "Voir les propriétés Notion ▾"}
+                    </span>
                   </div>
                 </div>
-                <span className="inline-block mt-2 px-2 py-0.5 bg-gray-100 rounded text-xs text-gray-600">
-                  {a.categorie}
-                </span>
+                {expandedArticle === i && facture && (
+                  <div className="px-4 pb-4 grid grid-cols-2 gap-x-4 gap-y-2 text-xs bg-gray-50">
+                    {buildArticleFields(
+                      a,
+                      { numero: facture.numero, dateVente: facture.dateVente },
+                      { payeur: payeur || undefined, piece: piece || undefined, postes: postes.length ? postes : undefined },
+                    ).map((f) => (
+                      <div key={f.label}>
+                        <div className="text-gray-400">{f.label}</div>
+                        <div className="text-gray-700 font-medium truncate">{f.displayValue}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
             <div className="p-4 flex justify-between items-center bg-gray-50">
@@ -343,6 +370,7 @@ export default function Home() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b">
                   <tr>
+                    <th className="w-8 px-4 py-3"></th>
                     <th className="text-left px-4 py-3 font-medium text-gray-500">N°</th>
                     <th className="text-left px-4 py-3 font-medium text-gray-500">Réf</th>
                     <th className="text-left px-4 py-3 font-medium text-gray-500">Désignation</th>
@@ -354,24 +382,50 @@ export default function Home() {
                 </thead>
                 <tbody className="divide-y">
                   {facture.articles.map((a: Article, i: number) => (
-                    <tr key={i} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-gray-400">{i + 1}</td>
-                      <td className="px-4 py-3 font-mono text-xs">{a.ref}</td>
-                      <td className="px-4 py-3 font-medium">{a.designation}</td>
-                      <td className="px-4 py-3">
-                        <span className="px-2 py-0.5 bg-gray-100 rounded text-xs text-gray-600">
-                          {a.categorie}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right">{a.prixUnitaireTTC.toFixed(2)} €</td>
-                      <td className="px-4 py-3 text-right">{a.quantite}</td>
-                      <td className="px-4 py-3 text-right font-medium">{a.totalTTC.toFixed(2)} €</td>
-                    </tr>
+                    <Fragment key={i}>
+                      <tr
+                        className="hover:bg-gray-50 cursor-pointer"
+                        onClick={() => setExpandedArticle(expandedArticle === i ? null : i)}
+                      >
+                        <td className="px-4 py-3 text-gray-400 text-center">
+                          {expandedArticle === i ? "▴" : "▾"}
+                        </td>
+                        <td className="px-4 py-3 text-gray-400">{i + 1}</td>
+                        <td className="px-4 py-3 font-mono text-xs">{a.ref}</td>
+                        <td className="px-4 py-3 font-medium">{a.designation}</td>
+                        <td className="px-4 py-3">
+                          <span className="px-2 py-0.5 bg-gray-100 rounded text-xs text-gray-600">
+                            {a.categorie}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">{a.prixUnitaireTTC.toFixed(2)} €</td>
+                        <td className="px-4 py-3 text-right">{a.quantite}</td>
+                        <td className="px-4 py-3 text-right font-medium">{a.totalTTC.toFixed(2)} €</td>
+                      </tr>
+                      {expandedArticle === i && facture && (
+                        <tr className="bg-gray-50">
+                          <td colSpan={8} className="px-4 py-4">
+                            <div className="grid grid-cols-4 gap-x-6 gap-y-3 text-xs">
+                              {buildArticleFields(
+                                a,
+                                { numero: facture.numero, dateVente: facture.dateVente },
+                                { payeur: payeur || undefined, piece: piece || undefined, postes: postes.length ? postes : undefined },
+                              ).map((f) => (
+                                <div key={f.label}>
+                                  <div className="text-gray-400">{f.label}</div>
+                                  <div className="text-gray-700 font-medium truncate">{f.displayValue}</div>
+                                </div>
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   ))}
                 </tbody>
                 <tfoot className="bg-gray-50 border-t">
                   <tr>
-                    <td colSpan={6} className="px-4 py-3 text-right font-medium">Total TTC</td>
+                    <td colSpan={7} className="px-4 py-3 text-right font-medium">Total TTC</td>
                     <td className="px-4 py-3 text-right font-bold">{facture.totalTTC.toFixed(2)} €</td>
                   </tr>
                 </tfoot>
