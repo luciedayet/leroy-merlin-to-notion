@@ -12,6 +12,38 @@ function parsePrice(s: string): number {
   return parseFloat(s.replace(/\s/g, "").replace(",", "."));
 }
 
+// pdf.js regroupe le texte d'une page en items positionnés (un item par
+// "cellule" de tableau la plupart du temps). Le rendu par défaut de
+// pdf-parse concatène les items d'une même ligne SANS séparateur, ce qui
+// colle par exemple le n° de ligne, la référence produit et la désignation
+// d'un article ("188035330LOT 3 MASQUES...") — impossible à redécouper de
+// façon fiable (la désignation peut elle-même commencer par un chiffre,
+// ex. "5 PLINTHES..."). On force ici un espace entre deux items d'une même
+// ligne pour préserver les colonnes du tableau.
+function renderPage(pageData: {
+  getTextContent: (opts: { normalizeWhitespace: boolean; disableCombineTextItems: boolean }) => Promise<{
+    items: { str: string; transform: number[] }[];
+  }>;
+}): Promise<string> {
+  return pageData
+    .getTextContent({ normalizeWhitespace: false, disableCombineTextItems: true })
+    .then((textContent) => {
+      let lastY: number | null = null;
+      let text = "";
+      for (const item of textContent.items) {
+        if (lastY === null) {
+          text += item.str;
+        } else if (lastY === item.transform[5]) {
+          text += ` ${item.str}`;
+        } else {
+          text += `\n${item.str}`;
+        }
+        lastY = item.transform[5];
+      }
+      return text;
+    });
+}
+
 function extractNumero(text: string): string {
   const match = text.match(/FACTURE\s+N°\s*(\d+)/);
   if (!match) throw new Error("Numéro de facture introuvable");
@@ -37,32 +69,13 @@ function extractTotal(text: string): number {
   return parsePrice(priceMatch![1]);
 }
 
-// pdf-parse concatène les colonnes du tableau sans séparateur : la ligne
-// d'un article se présente comme "<réf><désignation>" collés (ex:
-// "14040862BP ISOPLANE H65 63G" = réf 14040862, désignation "BP ISOPLANE...").
-// La longueur de la réf varie selon les produits (7 à 10 chiffres observés),
-// donc on prend tout le préfixe numérique comme réf. On repère ces lignes
-// de façon fiable via la ligne "Tx TVA" qui suit toujours immédiatement le
-// nom de l'article dans le PDF.
+// Une ligne d'article ressemble maintenant à "1 88035330 LOT 3 MASQUES ..."
+// (n° de ligne, réf article, désignation, correctement espacés). On la
+// repère via la ligne "Tx TVA" qui suit toujours immédiatement le nom de
+// l'article, pour éviter de confondre avec d'autres lignes numériques.
 //
-// La dernière ligne de prix mélange elle aussi "<prix remisé> €<quantité><total> €"
-// sans séparateur entre la quantité et le total (ex: "3.75 €13.75 €" =
-// prix remisé 3.75€, quantité 1, total 3.75€). On retrouve la coupure
-// exacte en cherchant la quantité qui rend total = prixRemisé × quantité.
-function splitQuantiteTotal(prixRemise: number, blob: string): { quantite: number; total: number | null } {
-  for (let k = 1; k <= blob.length - 3; k++) {
-    const qtyStr = blob.slice(0, k);
-    const totalStr = blob.slice(k);
-    if (!/^\d+$/.test(qtyStr) || !/^\d+[.,]\d{2}$/.test(totalStr)) continue;
-    const quantite = parseInt(qtyStr, 10);
-    const total = parsePrice(totalStr);
-    if (Math.abs(total - prixRemise * quantite) < 0.02) {
-      return { quantite, total };
-    }
-  }
-  return { quantite: 1, total: null };
-}
-
+// La ligne de prix finale ressemble à "3.75 € 1 3.75 €" (prix unitaire
+// remisé, quantité, total), elle aussi désormais sans ambiguïté.
 function extractArticles(text: string): Article[] {
   const articles: Article[] = [];
   let currentCategory = "";
@@ -79,14 +92,16 @@ function extractArticles(text: string): Article[] {
       continue;
     }
 
-    const rowMatch = line.match(/^(\d{5,12})(.+)$/);
+    const rowMatch = line.match(/^\d+\s+(\d+)\s+(.+)$/);
     const nextIsTva = i + 1 < lines.length && lines[i + 1].startsWith("Tx TVA");
     if (!rowMatch || !nextIsTva) { i++; continue; }
 
     const ref = parseInt(rowMatch[1], 10);
     const designation = rowMatch[2].trim();
 
-    const doubleMatches: { price: number; blob: string }[] = [];
+    let prixRemise: number | null = null;
+    let quantite = 1;
+    let total: number | null = null;
 
     let j = i + 1;
     let foundEnd = false;
@@ -94,36 +109,19 @@ function extractArticles(text: string): Article[] {
       const next = lines[j];
 
       if (CATEGORIES.has(next)) break;
-      if (next.startsWith("Total HT") || next.startsWith("Total TTC") || next.startsWith("DateRéglement")) break;
+      if (next.startsWith("Total HT") || next.startsWith("Total TTC") || next.startsWith("Date Réglement")) break;
 
-      if (
-        next.startsWith("Tx TVA") ||
-        next.startsWith("Remise") ||
-        next.startsWith(":") ||
-        next.startsWith("Dont") ||
-        next.startsWith("€")
-      ) {
-        j++; continue;
-      }
-
-      const doubleMatch = next.match(/^(\d+[.,]\d{2})\s*€(.+)€$/);
-      if (doubleMatch) {
-        doubleMatches.push({ price: parsePrice(doubleMatch[1]), blob: doubleMatch[2].trim() });
-        if (doubleMatches.length >= 2) foundEnd = true;
-        j++; continue;
+      const qtyTotalMatch = next.match(/^(\d+[.,]\d{2})\s*€\s+(\d+)\s+(\d+[.,]\d{2})\s*€$/);
+      if (qtyTotalMatch) {
+        prixRemise = parsePrice(qtyTotalMatch[1]);
+        quantite = parseInt(qtyTotalMatch[2], 10);
+        total = parsePrice(qtyTotalMatch[3]);
+        foundEnd = true;
+        j++;
+        continue;
       }
 
       j++;
-    }
-
-    let prixRemise: number | null = null;
-    let quantite = 1;
-    let total: number | null = null;
-
-    if (doubleMatches.length > 0) {
-      const last = doubleMatches[doubleMatches.length - 1];
-      prixRemise = last.price;
-      ({ quantite, total } = splitQuantiteTotal(prixRemise, last.blob));
     }
 
     if (designation && prixRemise !== null) {
@@ -145,7 +143,7 @@ function extractArticles(text: string): Article[] {
 
 export async function parseFacture(buffer: Buffer): Promise<Facture> {
   const pdfParse = (await import("pdf-parse")).default;
-  const data = await pdfParse(buffer);
+  const data = await pdfParse(buffer, { pagerender: renderPage });
   const text = data.text;
 
   return {
