@@ -38,13 +38,17 @@ function extractTotal(text: string): number {
 }
 
 // pdf-parse concatène les colonnes du tableau sans séparateur : la ligne
-// d'un article se présente sous la forme "<n° ligne><réf 8 chiffres><désignation>"
-// (ex: "188035330LOT 3 MASQUES CUP FFP2 DEXTER" = ligne 1, réf 88035330,
-// désignation "LOT 3 MASQUES..."). De même, la dernière ligne de prix
-// mélange "<prix remisé> €<quantité><total> €" sans séparateur entre la
-// quantité et le total (ex: "3.75 €13.75 €" = prix remisé 3.75€, quantité 1,
-// total 3.75€). On retrouve la coupure exacte en cherchant la quantité qui
-// rend total = prixRemisé × quantité.
+// d'un article se présente comme "<réf><désignation>" collés (ex:
+// "14040862BP ISOPLANE H65 63G" = réf 14040862, désignation "BP ISOPLANE...").
+// La longueur de la réf varie selon les produits (7 à 10 chiffres observés),
+// donc on prend tout le préfixe numérique comme réf. On repère ces lignes
+// de façon fiable via la ligne "Tx TVA" qui suit toujours immédiatement le
+// nom de l'article dans le PDF.
+//
+// La dernière ligne de prix mélange elle aussi "<prix remisé> €<quantité><total> €"
+// sans séparateur entre la quantité et le total (ex: "3.75 €13.75 €" =
+// prix remisé 3.75€, quantité 1, total 3.75€). On retrouve la coupure
+// exacte en cherchant la quantité qui rend total = prixRemisé × quantité.
 function splitQuantiteTotal(prixRemise: number, blob: string): { quantite: number; total: number | null } {
   for (let k = 1; k <= blob.length - 3; k++) {
     const qtyStr = blob.slice(0, k);
@@ -64,7 +68,6 @@ function extractArticles(text: string): Article[] {
   let currentCategory = "";
   const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
 
-  let itemNumber = 1;
   let i = 0;
 
   while (i < lines.length) {
@@ -76,11 +79,9 @@ function extractArticles(text: string): Article[] {
       continue;
     }
 
-    const prefix = String(itemNumber);
-    if (!line.startsWith(prefix)) { i++; continue; }
-
-    const rowMatch = line.slice(prefix.length).match(/^(\d{8})(.+)$/);
-    if (!rowMatch) { i++; continue; }
+    const rowMatch = line.match(/^(\d{5,12})(.+)$/);
+    const nextIsTva = i + 1 < lines.length && lines[i + 1].startsWith("Tx TVA");
+    if (!rowMatch || !nextIsTva) { i++; continue; }
 
     const ref = parseInt(rowMatch[1], 10);
     const designation = rowMatch[2].trim();
@@ -88,21 +89,27 @@ function extractArticles(text: string): Article[] {
     const doubleMatches: { price: number; blob: string }[] = [];
 
     let j = i + 1;
-    while (j < lines.length) {
+    let foundEnd = false;
+    while (j < lines.length && !foundEnd) {
       const next = lines[j];
 
       if (CATEGORIES.has(next)) break;
       if (next.startsWith("Total HT") || next.startsWith("Total TTC") || next.startsWith("DateRéglement")) break;
-      const nextItemPrefix = String(itemNumber + 1);
-      if (next.startsWith(nextItemPrefix) && /^\d{8}/.test(next.slice(nextItemPrefix.length))) break;
 
-      if (next.startsWith("Tx TVA") || next.startsWith("Remise") || next.startsWith(":")) {
+      if (
+        next.startsWith("Tx TVA") ||
+        next.startsWith("Remise") ||
+        next.startsWith(":") ||
+        next.startsWith("Dont") ||
+        next.startsWith("€")
+      ) {
         j++; continue;
       }
 
       const doubleMatch = next.match(/^(\d+[.,]\d{2})\s*€(.+)€$/);
       if (doubleMatch) {
         doubleMatches.push({ price: parsePrice(doubleMatch[1]), blob: doubleMatch[2].trim() });
+        if (doubleMatches.length >= 2) foundEnd = true;
         j++; continue;
       }
 
@@ -128,7 +135,6 @@ function extractArticles(text: string): Article[] {
         totalTTC: total ?? prixRemise * quantite,
         categorie: currentCategory,
       });
-      itemNumber++;
     }
 
     i = j;
