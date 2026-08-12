@@ -37,12 +37,36 @@ function extractTotal(text: string): number {
   return parsePrice(priceMatch![1]);
 }
 
+// pdf-parse concatène les colonnes du tableau sans séparateur : la ligne
+// d'un article se présente sous la forme "<n° ligne><réf 8 chiffres><désignation>"
+// (ex: "188035330LOT 3 MASQUES CUP FFP2 DEXTER" = ligne 1, réf 88035330,
+// désignation "LOT 3 MASQUES..."). De même, la dernière ligne de prix
+// mélange "<prix remisé> €<quantité><total> €" sans séparateur entre la
+// quantité et le total (ex: "3.75 €13.75 €" = prix remisé 3.75€, quantité 1,
+// total 3.75€). On retrouve la coupure exacte en cherchant la quantité qui
+// rend total = prixRemisé × quantité.
+function splitQuantiteTotal(prixRemise: number, blob: string): { quantite: number; total: number | null } {
+  for (let k = 1; k <= blob.length - 3; k++) {
+    const qtyStr = blob.slice(0, k);
+    const totalStr = blob.slice(k);
+    if (!/^\d+$/.test(qtyStr) || !/^\d+[.,]\d{2}$/.test(totalStr)) continue;
+    const quantite = parseInt(qtyStr, 10);
+    const total = parsePrice(totalStr);
+    if (Math.abs(total - prixRemise * quantite) < 0.02) {
+      return { quantite, total };
+    }
+  }
+  return { quantite: 1, total: null };
+}
+
 function extractArticles(text: string): Article[] {
   const articles: Article[] = [];
   let currentCategory = "";
   const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
 
+  let itemNumber = 1;
   let i = 0;
+
   while (i < lines.length) {
     const line = lines[i];
 
@@ -52,63 +76,59 @@ function extractArticles(text: string): Article[] {
       continue;
     }
 
-    if (!/^\d{8}$/.test(line)) { i++; continue; }
-    if (i < 1 || !/^\d{1,3}$/.test(lines[i - 1])) { i++; continue; }
+    const prefix = String(itemNumber);
+    if (!line.startsWith(prefix)) { i++; continue; }
 
-    const ref = parseInt(line);
-    let designation = "";
-    const prices: number[] = [];
-    let quantite = 1;
-    let total: number | null = null;
+    const rowMatch = line.slice(prefix.length).match(/^(\d{8})(.+)$/);
+    if (!rowMatch) { i++; continue; }
+
+    const ref = parseInt(rowMatch[1], 10);
+    const designation = rowMatch[2].trim();
+
+    const doubleMatches: { price: number; blob: string }[] = [];
 
     let j = i + 1;
-    let foundEnd = false;
-    while (j < lines.length && !foundEnd) {
+    while (j < lines.length) {
       const next = lines[j];
 
       if (CATEGORIES.has(next)) break;
-      if (/^\d{1,3}$/.test(next) && j + 1 < lines.length && /^\d{8}$/.test(lines[j + 1])) break;
-      if (next.startsWith("Total HT") || next.startsWith("Total TTC")) break;
+      if (next.startsWith("Total HT") || next.startsWith("Total TTC") || next.startsWith("DateRéglement")) break;
+      const nextItemPrefix = String(itemNumber + 1);
+      if (next.startsWith(nextItemPrefix) && /^\d{8}/.test(next.slice(nextItemPrefix.length))) break;
 
-      if (next.startsWith("Tx TVA") || next.startsWith("Dont") || next.startsWith("Remise") || next.startsWith(": ")) {
+      if (next.startsWith("Tx TVA") || next.startsWith("Remise") || next.startsWith(":")) {
         j++; continue;
       }
 
-      const priceMatch = next.match(/^([\d]+[.,]\d{2})\s*€$/);
-      if (priceMatch) {
-        prices.push(parsePrice(priceMatch[1]));
+      const doubleMatch = next.match(/^(\d+[.,]\d{2})\s*€(.+)€$/);
+      if (doubleMatch) {
+        doubleMatches.push({ price: parsePrice(doubleMatch[1]), blob: doubleMatch[2].trim() });
         j++; continue;
       }
 
-      const qtyMatch = next.match(/^(\d+)$/);
-      if (qtyMatch && prices.length >= 2) {
-        quantite = parseInt(qtyMatch[1]);
-        if (j + 1 < lines.length) {
-          const totalMatch = lines[j + 1].match(/^([\d]+[.,]\d{2})\s*€$/);
-          if (totalMatch) {
-            total = parsePrice(totalMatch[1]);
-            j += 2;
-            foundEnd = true;
-            continue;
-          }
-        }
-        j++; continue;
-      }
-
-      if (!designation) designation = next;
       j++;
     }
 
-    if (designation && prices.length > 0) {
-      const prixUnitaire = prices.length >= 3 ? prices[2] : prices[0];
+    let prixRemise: number | null = null;
+    let quantite = 1;
+    let total: number | null = null;
+
+    if (doubleMatches.length > 0) {
+      const last = doubleMatches[doubleMatches.length - 1];
+      prixRemise = last.price;
+      ({ quantite, total } = splitQuantiteTotal(prixRemise, last.blob));
+    }
+
+    if (designation && prixRemise !== null) {
       articles.push({
         ref,
         designation,
-        prixUnitaireTTC: prixUnitaire,
+        prixUnitaireTTC: prixRemise,
         quantite,
-        totalTTC: total ?? prixUnitaire * quantite,
+        totalTTC: total ?? prixRemise * quantite,
         categorie: currentCategory,
       });
+      itemNumber++;
     }
 
     i = j;
