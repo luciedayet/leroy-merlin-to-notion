@@ -1,8 +1,13 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import type { DriveFile, Facture } from "@/lib/types";
-import { PAYEURS } from "@/lib/types";
+import type { Article, DriveFile, Facture } from "@/lib/types";
+import { PAYEURS, PIECES, POSTES } from "@/lib/types";
+
+interface ArticleDetail {
+  piece: string;
+  postes: string[];
+}
 
 export default function Home() {
   const [facture, setFacture] = useState<Facture | null>(null);
@@ -15,6 +20,7 @@ export default function Home() {
   const [payeur, setPayeur] = useState("");
   const [customPayeur, setCustomPayeur] = useState(false);
   const [remboursed, setRemboursed] = useState(false);
+  const [articleDetails, setArticleDetails] = useState<ArticleDetail[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [driveFiles, setDriveFiles] = useState<DriveFile[]>([]);
   const [driveLoading, setDriveLoading] = useState(true);
@@ -41,6 +47,7 @@ export default function Home() {
     setPayeur("");
     setCustomPayeur(false);
     setRemboursed(false);
+    setArticleDetails(data.articles.map(() => ({ piece: "", postes: [] })));
   };
 
   const handleFile = useCallback(async (file: File) => {
@@ -104,7 +111,22 @@ export default function Home() {
     setPayeur("");
     setCustomPayeur(false);
     setRemboursed(false);
+    setArticleDetails([]);
   }, [pdfUrl]);
+
+  const setArticlePiece = (index: number, piece: string) => {
+    setArticleDetails((prev) => prev.map((d, i) => (i === index ? { ...d, piece } : d)));
+  };
+
+  const toggleArticlePoste = (index: number, poste: string) => {
+    setArticleDetails((prev) =>
+      prev.map((d, i) =>
+        i === index
+          ? { ...d, postes: d.postes.includes(poste) ? d.postes.filter((p) => p !== poste) : [...d.postes, poste] }
+          : d,
+      ),
+    );
+  };
 
   const formatDriveDate = (iso: string) => {
     const d = new Date(iso);
@@ -298,6 +320,60 @@ export default function Home() {
                   </label>
                 </div>
               </div>
+            </div>
+          )}
+
+          {facture && facture.articles.length > 0 && (
+            <div className="space-y-3">
+              <h2 className="text-base sm:text-lg font-semibold text-gray-900">Articles</h2>
+              {facture.articles.map((a: Article, i: number) => (
+                <div key={i} className="bg-white rounded-xl shadow-sm border p-4 sm:p-6">
+                  <div className="flex justify-between items-start gap-3 mb-4">
+                    <div className="min-w-0">
+                      <div className="font-medium text-sm sm:text-base truncate">{a.designation}</div>
+                      <div className="text-xs text-gray-400 font-mono mt-0.5">Réf {a.ref}</div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="font-medium text-sm sm:text-base">{a.prixUnitaireTTC.toFixed(2)} €</div>
+                      <div className="text-xs text-gray-400">× {a.quantite}</div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="min-w-0">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Pièce</label>
+                      <select
+                        value={articleDetails[i]?.piece ?? ""}
+                        onChange={(e) => setArticlePiece(i, e.target.value)}
+                        className="w-full min-w-0 border rounded-lg px-3 py-2 text-base sm:text-sm"
+                      >
+                        <option value="">— Non défini —</option>
+                        {PIECES.map((p) => (
+                          <option key={p} value={p}>{p}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="min-w-0">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Poste(s)</label>
+                      <div className="flex flex-wrap gap-2">
+                        {POSTES.map((p) => (
+                          <button
+                            key={p}
+                            type="button"
+                            onClick={() => toggleArticlePoste(i, p)}
+                            className={`px-3 py-1 rounded-full text-sm border transition-colors ${
+                              articleDetails[i]?.postes.includes(p)
+                                ? "bg-green-100 border-green-400 text-green-800"
+                                : "bg-white border-gray-300 text-gray-600 hover:border-green-300"
+                            }`}
+                          >
+                            {p}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
