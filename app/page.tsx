@@ -13,6 +13,7 @@ export default function Home() {
   const [dateVente, setDateVente] = useState("");
   const [magasin, setMagasin] = useState("");
   const [payeur, setPayeur] = useState("");
+  const [customPayeur, setCustomPayeur] = useState(false);
   const [remboursed, setRemboursed] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [driveFiles, setDriveFiles] = useState<DriveFile[]>([]);
@@ -38,6 +39,7 @@ export default function Home() {
     setDateVente(data.dateVente);
     setMagasin(data.magasin);
     setPayeur("");
+    setCustomPayeur(false);
     setRemboursed(false);
   };
 
@@ -100,6 +102,7 @@ export default function Home() {
     setDateVente("");
     setMagasin("");
     setPayeur("");
+    setCustomPayeur(false);
     setRemboursed(false);
   }, [pdfUrl]);
 
@@ -233,7 +236,9 @@ export default function Home() {
                 <div className="min-w-0">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
                   <input
-                    type="date"
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="AAAA-MM-JJ"
                     value={dateVente}
                     onChange={(e) => setDateVente(e.target.value)}
                     className="w-full min-w-0 border rounded-lg px-3 py-2 text-base sm:text-sm"
@@ -250,19 +255,35 @@ export default function Home() {
                 </div>
                 <div className="min-w-0">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Payeur</label>
-                  <input
-                    type="text"
-                    list="payeurs-list"
-                    value={payeur}
-                    onChange={(e) => setPayeur(e.target.value)}
-                    placeholder="— Non défini —"
+                  <select
+                    value={customPayeur ? "__other__" : payeur}
+                    onChange={(e) => {
+                      if (e.target.value === "__other__") {
+                        setCustomPayeur(true);
+                        setPayeur("");
+                      } else {
+                        setCustomPayeur(false);
+                        setPayeur(e.target.value);
+                      }
+                    }}
                     className="w-full min-w-0 border rounded-lg px-3 py-2 text-base sm:text-sm"
-                  />
-                  <datalist id="payeurs-list">
+                  >
+                    <option value="">— Non défini —</option>
                     {PAYEURS.map((p) => (
-                      <option key={p} value={p} />
+                      <option key={p} value={p}>{p}</option>
                     ))}
-                  </datalist>
+                    <option value="__other__">+ Ajouter un payeur...</option>
+                  </select>
+                  {customPayeur && (
+                    <input
+                      type="text"
+                      value={payeur}
+                      onChange={(e) => setPayeur(e.target.value)}
+                      placeholder="Nom du payeur"
+                      autoFocus
+                      className="w-full min-w-0 border rounded-lg px-3 py-2 text-base sm:text-sm mt-2"
+                    />
+                  )}
                 </div>
                 <div className="flex items-center gap-2 sm:col-span-2">
                   <input
