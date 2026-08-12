@@ -219,7 +219,7 @@ export default function Home() {
                 Informations de la facture
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
+                <div className="min-w-0">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Numéro de facture
                   </label>
@@ -227,39 +227,42 @@ export default function Home() {
                     type="text"
                     value={numero}
                     onChange={(e) => setNumero(e.target.value)}
-                    className="w-full border rounded-lg px-3 py-2 text-base sm:text-sm"
+                    className="w-full min-w-0 border rounded-lg px-3 py-2 text-base sm:text-sm"
                   />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
                   <input
                     type="date"
                     value={dateVente}
                     onChange={(e) => setDateVente(e.target.value)}
-                    className="w-full border rounded-lg px-3 py-2 text-base sm:text-sm"
+                    className="w-full min-w-0 border rounded-lg px-3 py-2 text-base sm:text-sm"
                   />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Magasin</label>
                   <input
                     type="text"
                     value={magasin}
                     onChange={(e) => setMagasin(e.target.value)}
-                    className="w-full border rounded-lg px-3 py-2 text-base sm:text-sm"
+                    className="w-full min-w-0 border rounded-lg px-3 py-2 text-base sm:text-sm"
                   />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Payeur</label>
-                  <select
+                  <input
+                    type="text"
+                    list="payeurs-list"
                     value={payeur}
                     onChange={(e) => setPayeur(e.target.value)}
-                    className="w-full border rounded-lg px-3 py-2 text-base sm:text-sm"
-                  >
-                    <option value="">— Non défini —</option>
+                    placeholder="— Non défini —"
+                    className="w-full min-w-0 border rounded-lg px-3 py-2 text-base sm:text-sm"
+                  />
+                  <datalist id="payeurs-list">
                     {PAYEURS.map((p) => (
-                      <option key={p} value={p}>{p}</option>
+                      <option key={p} value={p} />
                     ))}
-                  </select>
+                  </datalist>
                 </div>
                 <div className="flex items-center gap-2 sm:col-span-2">
                   <input
