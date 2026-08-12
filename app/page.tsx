@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import type { Article, DriveFile, Facture } from "@/lib/types";
 import { PAYEURS, PIECES, POSTES } from "@/lib/types";
 
@@ -17,6 +17,8 @@ export default function Home() {
   const [driveFiles, setDriveFiles] = useState<DriveFile[]>([]);
   const [driveLoading, setDriveLoading] = useState(true);
   const [driveError, setDriveError] = useState("");
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const requestIdRef = useRef(0);
 
   useEffect(() => {
     fetch("/api/drive/list")
@@ -30,6 +32,8 @@ export default function Home() {
   }, []);
 
   const handleFile = useCallback(async (file: File) => {
+    const id = ++requestIdRef.current;
+    setPdfUrl(URL.createObjectURL(file));
     setLoading(true);
     setError("");
     setSuccess("");
@@ -42,15 +46,17 @@ export default function Home() {
       const res = await fetch("/api/parse", { method: "POST", body: formData });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setFacture(data);
+      if (requestIdRef.current === id) setFacture(data);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Erreur inconnue");
+      if (requestIdRef.current === id) setError(e instanceof Error ? e.message : "Erreur inconnue");
     } finally {
-      setLoading(false);
+      if (requestIdRef.current === id) setLoading(false);
     }
   }, []);
 
   const handleDriveSelect = useCallback(async (fileId: string) => {
+    const id = ++requestIdRef.current;
+    setPdfUrl(`/api/drive/file?fileId=${encodeURIComponent(fileId)}`);
     setLoading(true);
     setError("");
     setSuccess("");
@@ -64,13 +70,26 @@ export default function Home() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setFacture(data);
+      if (requestIdRef.current === id) setFacture(data);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Erreur inconnue");
+      if (requestIdRef.current === id) setError(e instanceof Error ? e.message : "Erreur inconnue");
     } finally {
-      setLoading(false);
+      if (requestIdRef.current === id) setLoading(false);
     }
   }, []);
+
+  const resetSelection = useCallback(() => {
+    requestIdRef.current++;
+    if (pdfUrl?.startsWith("blob:")) URL.revokeObjectURL(pdfUrl);
+    setPdfUrl(null);
+    setFacture(null);
+    setLoading(false);
+    setError("");
+    setSuccess("");
+    setPayeur("");
+    setPiece("");
+    setPostes([]);
+  }, [pdfUrl]);
 
   const handleImport = async () => {
     if (!facture) return;
@@ -125,35 +144,33 @@ export default function Home() {
         Importez les articles d&apos;une facture PDF dans votre base Notion
       </p>
 
-      <div
-        className={`border-2 border-dashed rounded-xl p-6 sm:p-10 text-center cursor-pointer transition-colors active:bg-green-50 ${
-          dragOver
-            ? "border-green-500 bg-green-50"
-            : "border-gray-300 hover:border-green-400 hover:bg-green-50/50"
-        }`}
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setDragOver(false);
-          const file = e.dataTransfer.files[0];
-          if (file) handleFile(file);
-        }}
-        onClick={() => {
-          const input = document.createElement("input");
-          input.type = "file";
-          input.accept = ".pdf";
-          input.onchange = (e) => {
-            const file = (e.target as HTMLInputElement).files?.[0];
-            if (file) handleFile(file);
-          };
-          input.click();
-        }}
-      >
-        {loading ? (
-          <div className="text-green-600 font-medium">Analyse en cours...</div>
-        ) : (
-          <>
+      {!pdfUrl && (
+        <>
+          <div
+            className={`border-2 border-dashed rounded-xl p-6 sm:p-10 text-center cursor-pointer transition-colors active:bg-green-50 ${
+              dragOver
+                ? "border-green-500 bg-green-50"
+                : "border-gray-300 hover:border-green-400 hover:bg-green-50/50"
+            }`}
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOver(false);
+              const file = e.dataTransfer.files[0];
+              if (file) handleFile(file);
+            }}
+            onClick={() => {
+              const input = document.createElement("input");
+              input.type = "file";
+              input.accept = ".pdf";
+              input.onchange = (e) => {
+                const file = (e.target as HTMLInputElement).files?.[0];
+                if (file) handleFile(file);
+              };
+              input.click();
+            }}
+          >
             <div className="text-3xl sm:text-4xl mb-3">📄</div>
             <div className="text-gray-600 font-medium">
               Sélectionnez votre facture PDF
@@ -161,54 +178,72 @@ export default function Home() {
             <div className="text-gray-400 text-sm mt-1 hidden sm:block">
               ou glissez-déposez ici
             </div>
-          </>
-        )}
-      </div>
-
-      {!driveLoading && !driveError && driveFiles.length > 0 && (
-        <div className="mt-6">
-          <div className="text-sm font-medium text-gray-700 mb-2">Ou choisir depuis Drive</div>
-          <div className="bg-white rounded-xl border divide-y overflow-hidden">
-            {driveFiles.map((f) => (
-              <button
-                key={f.id}
-                onClick={() => handleDriveSelect(f.id)}
-                disabled={loading}
-                className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50 transition-colors"
-              >
-                <div className="min-w-0">
-                  <div className="text-sm font-medium text-gray-800 truncate">{f.name}</div>
-                  <div className="text-xs text-gray-400">
-                    {formatDriveDate(f.modifiedTime)} · {(f.size / 1024).toFixed(0)} Ko
-                  </div>
-                </div>
-                <span className="text-gray-300 shrink-0">›</span>
-              </button>
-            ))}
           </div>
-        </div>
+
+          {!driveLoading && !driveError && driveFiles.length > 0 && (
+            <div className="mt-6">
+              <div className="text-sm font-medium text-gray-700 mb-2">Ou choisir depuis Drive</div>
+              <div className="bg-white rounded-xl border divide-y overflow-hidden">
+                {driveFiles.map((f) => (
+                  <button
+                    key={f.id}
+                    onClick={() => handleDriveSelect(f.id)}
+                    className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-gray-50 active:bg-gray-100 transition-colors"
+                  >
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-gray-800 truncate">{f.name}</div>
+                      <div className="text-xs text-gray-400">
+                        {formatDriveDate(f.modifiedTime)} · {(f.size / 1024).toFixed(0)} Ko
+                      </div>
+                    </div>
+                    <span className="text-gray-300 shrink-0">›</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {driveError && (
+            <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-700 text-sm">
+              Drive indisponible : {driveError}
+            </div>
+          )}
+        </>
       )}
 
-      {driveError && (
-        <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-700 text-sm">
-          Drive indisponible : {driveError}
-        </div>
-      )}
+      {pdfUrl && (
+        <div className="mt-6 sm:mt-8 space-y-4 sm:space-y-6">
+          <button
+            onClick={resetSelection}
+            className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"
+          >
+            ‹ Choisir une autre facture
+          </button>
 
-      {error && (
-        <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-          {error}
-        </div>
-      )}
+          <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+            <iframe src={pdfUrl} title="Aperçu de la facture" className="w-full h-64 sm:h-96" />
+          </div>
 
-      {success && (
-        <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg text-green-700">
-          {success}
+          {loading && (
+            <div className="text-green-600 font-medium text-sm">Analyse en cours...</div>
+          )}
+
+          {error && (
+            <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+              {error}
+            </div>
+          )}
+
+          {success && (
+            <div className="p-4 bg-green-50 border border-green-200 rounded-lg text-green-700">
+              {success}
+            </div>
+          )}
         </div>
       )}
 
       {facture && (
-        <div className="mt-6 sm:mt-8 space-y-4 sm:space-y-6">
+        <div className="mt-4 sm:mt-6 space-y-4 sm:space-y-6">
           <div className="bg-white rounded-xl shadow-sm border p-4 sm:p-6">
             <h2 className="text-base sm:text-lg font-semibold text-gray-900 mb-3">
               Facture N° {facture.numero}
