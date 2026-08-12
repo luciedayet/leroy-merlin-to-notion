@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import type { Article, Facture } from "@/lib/types";
+import { useState, useCallback, useEffect } from "react";
+import type { Article, DriveFile, Facture } from "@/lib/types";
 import { PAYEURS, PIECES, POSTES } from "@/lib/types";
 
 export default function Home() {
@@ -14,6 +14,20 @@ export default function Home() {
   const [piece, setPiece] = useState("");
   const [postes, setPostes] = useState<string[]>([]);
   const [dragOver, setDragOver] = useState(false);
+  const [driveFiles, setDriveFiles] = useState<DriveFile[]>([]);
+  const [driveLoading, setDriveLoading] = useState(true);
+  const [driveError, setDriveError] = useState("");
+
+  useEffect(() => {
+    fetch("/api/drive/list")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.error) throw new Error(data.error);
+        setDriveFiles(data.files);
+      })
+      .catch((e: unknown) => setDriveError(e instanceof Error ? e.message : "Erreur Drive"))
+      .finally(() => setDriveLoading(false));
+  }, []);
 
   const handleFile = useCallback(async (file: File) => {
     setLoading(true);
@@ -26,6 +40,28 @@ export default function Home() {
 
     try {
       const res = await fetch("/api/parse", { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setFacture(data);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Erreur inconnue");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const handleDriveSelect = useCallback(async (fileId: string) => {
+    setLoading(true);
+    setError("");
+    setSuccess("");
+    setFacture(null);
+
+    try {
+      const res = await fetch("/api/drive/parse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileId }),
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setFacture(data);
@@ -73,6 +109,11 @@ export default function Home() {
   const formatDate = (iso: string) => {
     const [y, m, d] = iso.split("-");
     return `${d}/${m}/${y}`;
+  };
+
+  const formatDriveDate = (iso: string) => {
+    const d = new Date(iso);
+    return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
   };
 
   return (
@@ -123,6 +164,36 @@ export default function Home() {
           </>
         )}
       </div>
+
+      {!driveLoading && !driveError && driveFiles.length > 0 && (
+        <div className="mt-6">
+          <div className="text-sm font-medium text-gray-700 mb-2">Ou choisir depuis Drive</div>
+          <div className="bg-white rounded-xl border divide-y overflow-hidden">
+            {driveFiles.map((f) => (
+              <button
+                key={f.id}
+                onClick={() => handleDriveSelect(f.id)}
+                disabled={loading}
+                className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50 transition-colors"
+              >
+                <div className="min-w-0">
+                  <div className="text-sm font-medium text-gray-800 truncate">{f.name}</div>
+                  <div className="text-xs text-gray-400">
+                    {formatDriveDate(f.modifiedTime)} · {(f.size / 1024).toFixed(0)} Ko
+                  </div>
+                </div>
+                <span className="text-gray-300 shrink-0">›</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {driveError && (
+        <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-700 text-sm">
+          Drive indisponible : {driveError}
+        </div>
+      )}
 
       {error && (
         <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">

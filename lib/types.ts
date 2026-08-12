@@ -15,6 +15,13 @@ export interface Facture {
   magasin: string;
 }
 
+export interface DriveFile {
+  id: string;
+  name: string;
+  size: number;
+  modifiedTime: string;
+}
+
 export const PAYEURS = ["Pierre", "Anais", "Papou", "Papou/Lucie"] as const;
 export const PIECES = [
   "Chambre", "Salle de bain", "Jardin", "General", "Porte",
