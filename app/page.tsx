@@ -197,8 +197,22 @@ export default function Home() {
     return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
   };
 
+  const handleLogout = async () => {
+    await fetch("/api/logout", { method: "POST" });
+    window.location.href = "/login";
+  };
+
   return (
     <main className="max-w-4xl mx-auto px-4 py-6 sm:py-10">
+      <div className="flex items-center justify-end mb-4">
+        <button
+          onClick={handleLogout}
+          className="text-sm text-gray-400 hover:text-gray-600 transition-colors"
+        >
+          Se déconnecter
+        </button>
+      </div>
+
       <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">
         Leroy Merlin → Notion
       </h1>
@@ -208,6 +222,17 @@ export default function Home() {
 
       {!pdfUrl && (
         <>
+          <div className="flex justify-center mb-6">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/icon-192.png"
+              alt="Leroy Merlin → Notion"
+              width={64}
+              height={64}
+              className="w-16 h-16 rounded-2xl shadow-sm"
+            />
+          </div>
+
           {success && (
             <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg text-green-700">
               {success}
@@ -268,6 +293,12 @@ export default function Home() {
                   </button>
                 ))}
               </div>
+            </div>
+          )}
+
+          {!driveLoading && !driveError && driveFiles.length === 0 && (
+            <div className="mt-6 text-center py-6 border border-dashed border-gray-200 rounded-xl">
+              <div className="text-gray-400 text-sm">Aucune facture dans le dossier Drive</div>
             </div>
           )}
 
