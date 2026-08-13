@@ -27,6 +27,7 @@ export default function Home() {
   const [driveLoading, setDriveLoading] = useState(true);
   const [driveError, setDriveError] = useState("");
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [driveFileId, setDriveFileId] = useState<string | null>(null);
   const requestIdRef = useRef(0);
 
   useEffect(() => {
@@ -54,6 +55,7 @@ export default function Home() {
   const handleFile = useCallback(async (file: File) => {
     const id = ++requestIdRef.current;
     setPdfUrl(URL.createObjectURL(file));
+    setDriveFileId(null);
     setLoading(true);
     setError("");
     setSuccess("");
@@ -77,6 +79,7 @@ export default function Home() {
   const handleDriveSelect = useCallback(async (fileId: string) => {
     const id = ++requestIdRef.current;
     setPdfUrl(`/api/drive/file?fileId=${encodeURIComponent(fileId)}`);
+    setDriveFileId(fileId);
     setLoading(true);
     setError("");
     setSuccess("");
@@ -102,6 +105,7 @@ export default function Home() {
     requestIdRef.current++;
     if (pdfUrl?.startsWith("blob:")) URL.revokeObjectURL(pdfUrl);
     setPdfUrl(null);
+    setDriveFileId(null);
     setFacture(null);
     setLoading(false);
     setError("");
@@ -152,7 +156,25 @@ export default function Home() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setSuccess(`${data.count} article(s) importé(s) dans Notion !`);
+      let message = `${data.count} article(s) importé(s) dans Notion !`;
+
+      if (driveFileId) {
+        try {
+          const moveRes = await fetch("/api/drive/move", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fileId: driveFileId, remboursed }),
+          });
+          const moveData = await moveRes.json();
+          if (!moveRes.ok) throw new Error(moveData.error);
+          message += " Facture déplacée dans Drive.";
+          setDriveFiles((prev) => prev.filter((f) => f.id !== driveFileId));
+        } catch (e: unknown) {
+          message += ` (déplacement Drive échoué : ${e instanceof Error ? e.message : "erreur inconnue"})`;
+        }
+      }
+
+      setSuccess(message);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Erreur inconnue");
     } finally {

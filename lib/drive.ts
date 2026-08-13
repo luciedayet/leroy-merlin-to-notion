@@ -17,7 +17,7 @@ function getClient(): JWT {
     );
   }
 
-  return new JWT({ email, key, scopes: ["https://www.googleapis.com/auth/drive.readonly"] });
+  return new JWT({ email, key, scopes: ["https://www.googleapis.com/auth/drive"] });
 }
 
 function getFolderId(): string {
@@ -65,4 +65,20 @@ export async function downloadDriveFile(fileId: string): Promise<Buffer> {
   }
 
   return Buffer.from(await res.arrayBuffer());
+}
+
+export async function moveDriveFile(fileId: string, targetFolderId: string): Promise<void> {
+  const client = getClient();
+  const sourceFolderId = getFolderId();
+  const { token } = await client.getAccessToken();
+
+  const url = new URL(`https://www.googleapis.com/drive/v3/files/${fileId}`);
+  url.searchParams.set("addParents", targetFolderId);
+  url.searchParams.set("removeParents", sourceFolderId);
+  url.searchParams.set("fields", "id,parents");
+
+  const res = await fetch(url, { method: "PATCH", headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) {
+    throw new Error(`Erreur déplacement Drive (${res.status})`);
+  }
 }
