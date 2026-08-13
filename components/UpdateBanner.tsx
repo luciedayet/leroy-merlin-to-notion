@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 export default function UpdateBanner() {
   const [waitingWorker, setWaitingWorker] = useState<ServiceWorker | null>(null);
+  const [dismissed, setDismissed] = useState(false);
   const reloadedRef = useRef(false);
 
   useEffect(() => {
@@ -59,18 +60,29 @@ export default function UpdateBanner() {
     };
   }, []);
 
-  if (!waitingWorker) return null;
+  if (!waitingWorker || dismissed) return null;
 
   return (
-    <div className="fixed bottom-4 inset-x-4 sm:inset-x-auto sm:right-4 sm:w-80 z-50">
-      <div className="bg-white rounded-xl shadow-lg border p-4 flex items-center justify-between gap-3">
-        <span className="text-sm text-gray-700">Nouvelle version disponible</span>
-        <button
-          onClick={() => waitingWorker.postMessage({ type: "SKIP_WAITING" })}
-          className="shrink-0 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors"
-        >
-          Mettre à jour
-        </button>
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-lg max-w-sm w-full p-6 text-center space-y-4">
+        <div className="text-lg font-semibold text-gray-900">Nouvelle version disponible</div>
+        <p className="text-sm text-gray-500">
+          Une mise à jour de l&apos;application est prête à être installée.
+        </p>
+        <div className="flex flex-col gap-2 pt-2">
+          <button
+            onClick={() => waitingWorker.postMessage({ type: "SKIP_WAITING" })}
+            className="w-full py-2.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors"
+          >
+            Mettre à jour
+          </button>
+          <button
+            onClick={() => setDismissed(true)}
+            className="w-full py-2.5 text-gray-500 hover:text-gray-700 text-sm font-medium transition-colors"
+          >
+            Mettre à jour plus tard
+          </button>
+        </div>
       </div>
     </div>
   );

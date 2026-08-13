@@ -213,6 +213,17 @@ export default function Home() {
         </button>
       </div>
 
+      <div className="flex justify-center mb-4">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/icon-192.png"
+          alt="Leroy Merlin → Notion"
+          width={64}
+          height={64}
+          className="w-16 h-16 rounded-2xl shadow-sm"
+        />
+      </div>
+
       <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">
         Leroy Merlin → Notion
       </h1>
@@ -222,17 +233,6 @@ export default function Home() {
 
       {!pdfUrl && (
         <>
-          <div className="flex justify-center mb-6">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/icon-192.png"
-              alt="Leroy Merlin → Notion"
-              width={64}
-              height={64}
-              className="w-16 h-16 rounded-2xl shadow-sm"
-            />
-          </div>
-
           {success && (
             <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg text-green-700">
               {success}
