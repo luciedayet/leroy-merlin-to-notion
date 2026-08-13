@@ -28,6 +28,7 @@ export default function Home() {
   const [driveError, setDriveError] = useState("");
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [driveFileId, setDriveFileId] = useState<string | null>(null);
+  const [fileName, setFileName] = useState("");
   const requestIdRef = useRef(0);
 
   useEffect(() => {
@@ -56,6 +57,7 @@ export default function Home() {
     const id = ++requestIdRef.current;
     setPdfUrl(URL.createObjectURL(file));
     setDriveFileId(null);
+    setFileName(file.name);
     setLoading(true);
     setError("");
     setSuccess("");
@@ -76,10 +78,11 @@ export default function Home() {
     }
   }, []);
 
-  const handleDriveSelect = useCallback(async (fileId: string) => {
+  const handleDriveSelect = useCallback(async (fileId: string, name: string) => {
     const id = ++requestIdRef.current;
     setPdfUrl(`/api/drive/file?fileId=${encodeURIComponent(fileId)}`);
     setDriveFileId(fileId);
+    setFileName(name);
     setLoading(true);
     setError("");
     setSuccess("");
@@ -106,6 +109,7 @@ export default function Home() {
     if (pdfUrl?.startsWith("blob:")) URL.revokeObjectURL(pdfUrl);
     setPdfUrl(null);
     setDriveFileId(null);
+    setFileName("");
     setFacture(null);
     setLoading(false);
     setNumero("");
@@ -250,7 +254,7 @@ export default function Home() {
                 {driveFiles.map((f) => (
                   <button
                     key={f.id}
-                    onClick={() => handleDriveSelect(f.id)}
+                    onClick={() => handleDriveSelect(f.id, f.name)}
                     className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-gray-50 active:bg-gray-100 transition-colors"
                   >
                     <div className="min-w-0">
@@ -282,6 +286,10 @@ export default function Home() {
           >
             ‹ Choisir une autre facture
           </button>
+
+          {fileName && (
+            <div className="text-sm font-medium text-gray-700 truncate">{fileName}</div>
+          )}
 
           <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
             <iframe src={pdfUrl} title="Aperçu de la facture" className="w-full h-64 sm:h-96" />
