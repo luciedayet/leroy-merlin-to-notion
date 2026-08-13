@@ -292,7 +292,7 @@ export default function Home() {
           )}
 
           <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-            <iframe src={pdfUrl} title="Aperçu de la facture" className="w-full h-64 sm:h-96" />
+            <iframe src={pdfUrl} title="Aperçu de la facture" className="w-full h-[75vh]" />
           </div>
 
           {loading && (
@@ -302,6 +302,17 @@ export default function Home() {
           {error && (
             <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
               {error}
+            </div>
+          )}
+
+          {facture && facture.articles.length > 0 && (
+            <div className="bg-white rounded-xl shadow-sm border p-4 sm:p-6 flex items-center justify-between">
+              <span className="text-gray-500 text-sm">
+                {facture.articles.length} article{facture.articles.length > 1 ? "s" : ""}
+              </span>
+              <span className="font-bold text-lg">
+                {facture.articles.reduce((sum, a) => sum + a.totalTTC, 0).toFixed(2)} €
+              </span>
             </div>
           )}
 
