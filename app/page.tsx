@@ -288,11 +288,24 @@ export default function Home() {
           </button>
 
           {fileName && (
-            <div className="text-sm font-medium text-gray-700 truncate">{fileName}</div>
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-sm font-medium text-gray-700 truncate">{fileName}</div>
+              <a
+                href={pdfUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-green-600 hover:text-green-700 font-medium shrink-0"
+              >
+                Ouvrir le PDF ↗
+              </a>
+            </div>
           )}
 
           <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
             <iframe src={pdfUrl} title="Aperçu de la facture" className="w-full h-[75vh]" />
+          </div>
+          <div className="text-xs text-gray-400">
+            Si l&apos;aperçu n&apos;affiche qu&apos;une page, ouvre le PDF dans un nouvel onglet pour voir toutes les pages.
           </div>
 
           {loading && (
