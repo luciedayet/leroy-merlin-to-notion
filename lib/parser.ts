@@ -2,7 +2,7 @@ import type { Article, Facture } from "./types";
 
 const CATEGORIES = new Set([
   "ECLAIRAGE", "RANGEMENT CUISINE", "SANITAIRE", "PLOMBERIE",
-  "ELECTRICITE", "PEINTURE", "OUTILLAGE", "QUINCAILLERIE",
+  "ELECTRICITE", "ELECTRICITE-PLOMBERIE", "PEINTURE", "OUTILLAGE", "QUINCAILLERIE",
   "REVETEMENT SOL", "MENUISERIE", "JARDIN", "CARRELAGE",
   "AMENAGEMENT", "SALLE DE BAIN", "CUISINE", "CHAUFFAGE",
   "DECORATION", "RANGEMENT", "MATERIAUX", "LUMINAIRE",
@@ -71,11 +71,15 @@ function extractTotal(text: string): number {
 
 // Une ligne d'article ressemble maintenant à "1 88035330 LOT 3 MASQUES ..."
 // (n° de ligne, réf article, désignation, correctement espacés). On la
-// repère via la ligne "Tx TVA" qui suit toujours immédiatement le nom de
-// l'article, pour éviter de confondre avec d'autres lignes numériques.
+// repère via la ligne "Tx TVA" qui suit le nom de l'article, pour éviter de
+// confondre avec d'autres lignes numériques. Une désignation trop longue
+// peut déborder sur une ou deux lignes suivantes avant "Tx TVA" (ex: "25M
+// TUYAU POLYETHYLENE 16BARS BLEU" puis "19X25" sur la ligne d'après) : on
+// les rattache tant qu'elles ne ressemblent pas au début d'un autre article,
+// d'une catégorie ou d'un total.
 //
 // La ligne de prix finale ressemble à "3.75 € 1 3.75 €" (prix unitaire
-// remisé, quantité, total), elle aussi désormais sans ambiguïté.
+// remisé, quantité, total), sans ambiguïté.
 function extractArticles(text: string): Article[] {
   const articles: Article[] = [];
   let currentCategory = "";
@@ -93,17 +97,31 @@ function extractArticles(text: string): Article[] {
     }
 
     const rowMatch = line.match(/^\d+\s+(\d+)\s+(.+)$/);
-    const nextIsTva = i + 1 < lines.length && lines[i + 1].startsWith("Tx TVA");
-    if (!rowMatch || !nextIsTva) { i++; continue; }
+    if (!rowMatch) { i++; continue; }
 
     const ref = parseInt(rowMatch[1], 10);
-    const designation = rowMatch[2].trim();
+    let designation = rowMatch[2].trim();
+
+    let j = i + 1;
+    let foundTva = false;
+    while (j < lines.length && j < i + 4) {
+      if (lines[j].startsWith("Tx TVA")) {
+        foundTva = true;
+        break;
+      }
+      if (CATEGORIES.has(lines[j]) || lines[j].startsWith("Total") || /^\d+\s+\d+\s+.+$/.test(lines[j])) {
+        break;
+      }
+      designation += ` ${lines[j]}`;
+      j++;
+    }
+
+    if (!foundTva) { i++; continue; }
 
     let prixRemise: number | null = null;
     let quantite = 1;
     let total: number | null = null;
 
-    let j = i + 1;
     let foundEnd = false;
     while (j < lines.length && !foundEnd) {
       const next = lines[j];
