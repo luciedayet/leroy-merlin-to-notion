@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { listDriveFiles } from "@/lib/drive";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
     const files = await listDriveFiles();

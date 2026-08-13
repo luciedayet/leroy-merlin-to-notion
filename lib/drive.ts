@@ -39,7 +39,7 @@ export async function listDriveFiles(): Promise<DriveFile[]> {
   url.searchParams.set("orderBy", "modifiedTime desc");
   url.searchParams.set("pageSize", "100");
 
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
   if (!res.ok) {
     throw new Error(`Erreur Drive API (${res.status})`);
   }
@@ -59,6 +59,7 @@ export async function downloadDriveFile(fileId: string): Promise<Buffer> {
 
   const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
     headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
   });
   if (!res.ok) {
     throw new Error(`Erreur téléchargement Drive (${res.status})`);
@@ -77,7 +78,7 @@ export async function moveDriveFile(fileId: string, targetFolderId: string): Pro
   url.searchParams.set("removeParents", sourceFolderId);
   url.searchParams.set("fields", "id,parents");
 
-  const res = await fetch(url, { method: "PATCH", headers: { Authorization: `Bearer ${token}` } });
+  const res = await fetch(url, { method: "PATCH", headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
   if (!res.ok) {
     throw new Error(`Erreur déplacement Drive (${res.status})`);
   }
