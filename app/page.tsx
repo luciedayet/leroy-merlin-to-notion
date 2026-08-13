@@ -12,6 +12,7 @@ interface ArticleDetail {
 export default function Home() {
   const [facture, setFacture] = useState<Facture | null>(null);
   const [loading, setLoading] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [numero, setNumero] = useState("");
@@ -126,6 +127,37 @@ export default function Home() {
           : d,
       ),
     );
+  };
+
+  const handleImport = async () => {
+    if (!facture) return;
+    setImporting(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      const res = await fetch("/api/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          facture: { numero, dateVente },
+          payeur: payeur || undefined,
+          remboursed,
+          articles: facture.articles.map((a, i) => ({
+            ...a,
+            piece: articleDetails[i]?.piece || undefined,
+            postes: articleDetails[i]?.postes?.length ? articleDetails[i].postes : undefined,
+          })),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setSuccess(`${data.count} article(s) importé(s) dans Notion !`);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Erreur inconnue");
+    } finally {
+      setImporting(false);
+    }
   };
 
   const formatDriveDate = (iso: string) => {
@@ -374,6 +406,26 @@ export default function Home() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {facture && facture.articles.length > 0 && (
+            <div className="bg-white rounded-xl shadow-sm border p-4 sm:p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-gray-900">Total</span>
+                <span className="font-bold text-lg">
+                  {facture.articles.reduce((sum, a) => sum + a.totalTTC, 0).toFixed(2)} €
+                </span>
+              </div>
+              <button
+                onClick={handleImport}
+                disabled={importing}
+                className="w-full py-3.5 sm:py-3 bg-green-600 hover:bg-green-700 disabled:bg-green-300 text-white font-medium rounded-xl transition-colors"
+              >
+                {importing
+                  ? "Import en cours..."
+                  : `Importer ${facture.articles.length} article(s) dans Notion`}
+              </button>
             </div>
           )}
         </div>

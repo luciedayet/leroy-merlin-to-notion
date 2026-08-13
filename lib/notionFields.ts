@@ -7,12 +7,20 @@ export interface NotionField {
   property: any;
 }
 
+// "Magasin" est un select à options fixes côté Notion (Leboncoin, Leroy
+// Merlin, Cedeo) : on y envoie toujours cette valeur, indépendamment du nom
+// de magasin détaillé (avec la ville) affiché/modifiable dans l'app.
 const MAGASIN = "Leroy Merlin";
 
+export interface ArticleWithDetails extends Article {
+  piece?: string;
+  postes?: string[];
+}
+
 export function buildArticleFields(
-  article: Article,
+  article: ArticleWithDetails,
   facture: { numero: string; dateVente: string },
-  options: { payeur?: string; piece?: string; postes?: string[] },
+  options: { payeur?: string; remboursed?: boolean },
 ): NotionField[] {
   const fields: NotionField[] = [
     { label: "Nom", displayValue: article.designation, property: { title: [{ text: { content: article.designation } }] } },
@@ -22,20 +30,24 @@ export function buildArticleFields(
     { label: "Magasin", displayValue: MAGASIN, property: { select: { name: MAGASIN } } },
     { label: "Facture", displayValue: facture.numero, property: { rich_text: [{ text: { content: facture.numero } }] } },
     { label: "Achat", displayValue: facture.dateVente, property: { date: { start: facture.dateVente } } },
-    { label: "Remboursé", displayValue: "Non", property: { checkbox: false } },
+    {
+      label: "Remboursé",
+      displayValue: options.remboursed ? "Oui" : "Non",
+      property: { checkbox: !!options.remboursed },
+    },
   ];
 
   if (options.payeur) {
     fields.push({ label: "Payeur", displayValue: options.payeur, property: { select: { name: options.payeur } } });
   }
-  if (options.piece) {
-    fields.push({ label: "Pièce", displayValue: options.piece, property: { select: { name: options.piece } } });
+  if (article.piece) {
+    fields.push({ label: "Pièce", displayValue: article.piece, property: { select: { name: article.piece } } });
   }
-  if (options.postes?.length) {
+  if (article.postes?.length) {
     fields.push({
       label: "Poste",
-      displayValue: options.postes.join(", "),
-      property: { multi_select: options.postes.map((p) => ({ name: p })) },
+      displayValue: article.postes.join(", "),
+      property: { multi_select: article.postes.map((p) => ({ name: p })) },
     });
   }
 

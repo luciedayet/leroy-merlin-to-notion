@@ -1,11 +1,10 @@
 import { Client } from "@notionhq/client";
-import type { Article } from "./types";
-import { buildArticleFields } from "./notionFields";
+import { buildArticleFields, type ArticleWithDetails } from "./notionFields";
 
 export async function importArticles(
-  articles: Article[],
+  articles: ArticleWithDetails[],
   facture: { numero: string; dateVente: string },
-  options: { payeur?: string; piece?: string; postes?: string[] },
+  options: { payeur?: string; remboursed?: boolean },
 ): Promise<number> {
   const apiKey = process.env.NOTION_API_KEY;
   const databaseId = process.env.NOTION_DATABASE_ID;
