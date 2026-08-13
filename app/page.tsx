@@ -101,15 +101,13 @@ export default function Home() {
     }
   }, []);
 
-  const resetSelection = useCallback(() => {
+  const clearSelection = useCallback(() => {
     requestIdRef.current++;
     if (pdfUrl?.startsWith("blob:")) URL.revokeObjectURL(pdfUrl);
     setPdfUrl(null);
     setDriveFileId(null);
     setFacture(null);
     setLoading(false);
-    setError("");
-    setSuccess("");
     setNumero("");
     setDateVente("");
     setMagasin("");
@@ -118,6 +116,12 @@ export default function Home() {
     setRemboursed(false);
     setArticleDetails([]);
   }, [pdfUrl]);
+
+  const resetSelection = useCallback(() => {
+    clearSelection();
+    setError("");
+    setSuccess("");
+  }, [clearSelection]);
 
   const setArticlePiece = (index: number, piece: string) => {
     setArticleDetails((prev) => prev.map((d, i) => (i === index ? { ...d, piece } : d)));
@@ -174,6 +178,7 @@ export default function Home() {
         }
       }
 
+      clearSelection();
       setSuccess(message);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Erreur inconnue");
@@ -198,6 +203,12 @@ export default function Home() {
 
       {!pdfUrl && (
         <>
+          {success && (
+            <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg text-green-700">
+              {success}
+            </div>
+          )}
+
           <div
             className={`border-2 border-dashed rounded-xl p-6 sm:p-10 text-center cursor-pointer transition-colors active:bg-green-50 ${
               dragOver
@@ -283,12 +294,6 @@ export default function Home() {
           {error && (
             <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
               {error}
-            </div>
-          )}
-
-          {success && (
-            <div className="p-4 bg-green-50 border border-green-200 rounded-lg text-green-700">
-              {success}
             </div>
           )}
 
