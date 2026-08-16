@@ -4,6 +4,7 @@ const CATEGORIES = new Set([
   "ECLAIRAGE", "RANGEMENT CUISINE", "SANITAIRE", "PLOMBERIE",
   "ELECTRICITE", "ELECTRICITE-PLOMBERIE", "PEINTURE", "OUTILLAGE", "QUINCAILLERIE",
   "REVETEMENT SOL", "MENUISERIE", "JARDIN", "CARRELAGE",
+  "SOL ET CARRELAGE MURAL",
   "AMENAGEMENT", "SALLE DE BAIN", "CUISINE", "CHAUFFAGE",
   "DECORATION", "RANGEMENT", "MATERIAUX", "LUMINAIRE",
 ]);
@@ -57,8 +58,8 @@ function extractDate(text: string): string {
 }
 
 function extractMagasin(text: string): string {
-  const match = text.match(/Leroy Merlin\s+(\w+)/);
-  return match ? `Leroy Merlin ${match[1]}` : "Leroy Merlin";
+  const match = text.match(/Leroy Merlin\s+([^\n]+)/);
+  return match ? `Leroy Merlin ${match[1].trim()}` : "Leroy Merlin";
 }
 
 function extractTotal(text: string): number {
@@ -129,11 +130,22 @@ function extractArticles(text: string): Article[] {
       if (CATEGORIES.has(next)) break;
       if (next.startsWith("Total HT") || next.startsWith("Total TTC") || next.startsWith("Date Réglement")) break;
 
-      const qtyTotalMatch = next.match(/^(\d+[.,]\d{2})\s*€\s+(\d+)\s+(\d+[.,]\d{2})\s*€$/);
-      if (qtyTotalMatch) {
-        prixRemise = parsePrice(qtyTotalMatch[1]);
-        quantite = parseInt(qtyTotalMatch[2], 10);
-        total = parsePrice(qtyTotalMatch[3]);
+      // Format 1: "prix_remisé € quantité total €" (3 values, with optional decimal qty)
+      const fmt1 = next.match(/^(\d+[.,]\d{2})\s*€\s+(\d+(?:[.,]\d+)?)\s+(\d+[.,]\d{2})\s*€$/);
+      if (fmt1) {
+        prixRemise = parsePrice(fmt1[1]);
+        quantite = parseFloat(fmt1[2].replace(",", "."));
+        total = parsePrice(fmt1[3]);
+        foundEnd = true;
+        j++;
+        continue;
+      }
+      // Format 2: "prix_orig € prix_remisé € quantité total €" (4 values)
+      const fmt2 = next.match(/^(\d+[.,]\d{2})\s*€\s+(\d+[.,]\d{2})\s*€\s+(\d+(?:[.,]\d+)?)\s+(\d+[.,]\d{2})\s*€$/);
+      if (fmt2) {
+        prixRemise = parsePrice(fmt2[2]);
+        quantite = parseFloat(fmt2[3].replace(",", "."));
+        total = parsePrice(fmt2[4]);
         foundEnd = true;
         j++;
         continue;
