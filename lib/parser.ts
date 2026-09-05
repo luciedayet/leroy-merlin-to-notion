@@ -45,25 +45,44 @@ function renderPage(pageData: {
     });
 }
 
+// Depuis le passage à la facturation électronique, Leroy Merlin émet un
+// nouveau format de facture (en-tête "N° Document", "Code Fournisseur" par
+// article, montants HT/TVA détaillés) en plus de l'ancien format ticket de
+// caisse ("FACTURE N°", "Date de vente"). On tente d'abord les motifs du
+// nouveau format puis on retombe sur l'ancien, pour rester compatible avec
+// les deux.
+
 function extractNumero(text: string): string {
+  const electronique = text.match(/N°\s*Document\s*:\s*(\S+)/);
+  if (electronique) return electronique[1];
   const match = text.match(/FACTURE\s+N°\s*(\d+)/);
   if (!match) throw new Error("Numéro de facture introuvable");
   return match[1];
 }
 
 function extractDate(text: string): string {
+  const electronique = text.match(/Date d'émission\s*:\s*(\d{2})\/(\d{2})\/(\d{4})/);
+  if (electronique) return `${electronique[3]}-${electronique[2]}-${electronique[1]}`;
   const match = text.match(/Date de vente\s*:\s*\n?.*?\n?(\d{2})\/(\d{2})\/(\d{4})/);
   if (!match) throw new Error("Date de vente introuvable");
   return `${match[3]}-${match[2]}-${match[1]}`;
 }
 
 function extractMagasin(text: string): string {
+  // Le nouveau format ne mentionne le magasin physique (par opposition au
+  // siège "Leroy Merlin France") que dans le bloc "Agent du Vendeur".
+  const agent = text.match(/Agent du Vendeur\s*\n([^\n]+)/);
+  if (agent) {
+    const nom = agent[1].trim();
+    if (nom && nom !== "Leroy Merlin France") return `Leroy Merlin ${nom}`;
+  }
   const match = text.match(/Leroy Merlin\s+([^\n]+)/);
   return match ? `Leroy Merlin ${match[1].trim()}` : "Leroy Merlin";
 }
 
 function extractTotal(text: string): number {
-  const matches = text.match(/Total TTC\s*\n?\s*([\d\s]+[.,]\d{2})\s*€/g);
+  const electronique = text.match(/MONTANT TOTAL TTC\s*\n?\s*([\d\s]+[.,]\d{2})\s*€/g);
+  const matches = electronique ?? text.match(/Total TTC\s*\n?\s*([\d\s]+[.,]\d{2})\s*€/g);
   if (!matches) throw new Error("Total TTC introuvable");
   const last = matches[matches.length - 1];
   const priceMatch = last.match(/([\d\s]+[.,]\d{2})\s*€/);
@@ -171,16 +190,107 @@ function extractArticles(text: string): Article[] {
   return articles;
 }
 
+// Format facturation électronique : chaque article est un bloc
+// "<n°>\nNom : <désignation>\nCode Fournisseur : <réf>\n...\n• Rayon : : <catégorie>
+// \n• Tx TVA : : <taux> Montant TVA : <tva> € Montant HT : <ht> €\n<prix> € <qté> Pièce(s) <taux>% <montant taxable> €"
+// (éventuellement suivi d'une remise déjà intégrée au prix affiché). Les
+// montants y sont exprimés HT + TVA séparément (facture professionnelle),
+// contrairement à l'ancien ticket qui affichait un prix TTC unique : on
+// recompose donc le TTC ligne à ligne à partir du HT et de la TVA.
+function extractArticlesElectronique(text: string): Article[] {
+  const articles: Article[] = [];
+  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+
+  let i = 0;
+  while (i < lines.length) {
+    if (!(/^\d+$/.test(lines[i]) && lines[i + 1] && /^Nom\s*:/.test(lines[i + 1]))) {
+      i++;
+      continue;
+    }
+
+    let j = i + 1;
+    let designation = lines[j].replace(/^Nom\s*:\s*/, "").trim();
+    j++;
+    while (j < lines.length && !lines[j].startsWith("Code Fournisseur")) {
+      designation += ` ${lines[j]}`;
+      j++;
+    }
+
+    let ref = 0;
+    if (j < lines.length) {
+      const codeMatch = lines[j].match(/^Code Fournisseur\s*:\s*(\d+)/);
+      if (codeMatch) {
+        ref = parseInt(codeMatch[1], 10);
+        j++;
+      }
+    }
+
+    let categorie = "";
+    let htAmount: number | null = null;
+    let tvaAmount: number | null = null;
+
+    while (j < lines.length) {
+      const rayonMatch = lines[j].match(/Rayon\s*:\s*:\s*(.+)$/);
+      if (rayonMatch) {
+        categorie = rayonMatch[1].trim();
+        j++;
+        continue;
+      }
+
+      const tvaMatch = lines[j].match(/Montant TVA\s*:\s*([\d.,]+)\s*€\s*Montant HT\s*:\s*([\d.,]+)\s*€/);
+      if (tvaMatch) {
+        tvaAmount = parsePrice(tvaMatch[1]);
+        htAmount = parsePrice(tvaMatch[2]);
+        j++;
+        continue;
+      }
+
+      const priceRow = lines[j].match(
+        /^(\d+[.,]\d{2})\s*€\s+(\d+(?:[.,]\d+)?)\s+.+?(\d+(?:[.,]\d+)?)%\s+(\d+[.,]\d{2})\s*€$/
+      );
+      if (priceRow) {
+        const quantite = parseFloat(priceRow[2].replace(",", "."));
+        const montantTaxable = parsePrice(priceRow[4]);
+        const total =
+          htAmount !== null && tvaAmount !== null
+            ? Math.round((htAmount + tvaAmount) * 100) / 100
+            : montantTaxable;
+
+        articles.push({
+          ref,
+          designation,
+          prixUnitaireTTC: quantite ? Math.round((total / quantite) * 100) / 100 : total,
+          quantite,
+          totalTTC: total,
+          categorie,
+        });
+        j++;
+        break;
+      }
+
+      if (/^\d+$/.test(lines[j]) && lines[j + 1] && /^Nom\s*:/.test(lines[j + 1])) break;
+      if (/^(Conditions|Agent du Vendeur|Remises sur la facture)/.test(lines[j])) break;
+      j++;
+    }
+
+    i = j;
+  }
+
+  return articles;
+}
+
 export async function parseFacture(buffer: Buffer): Promise<Facture> {
   const pdfParse = (await import("pdf-parse")).default;
   const data = await pdfParse(buffer, { pagerender: renderPage });
   const text = data.text;
+
+  const isElectronique = /Code Fournisseur\s*:/.test(text);
 
   return {
     numero: extractNumero(text),
     dateVente: extractDate(text),
     magasin: extractMagasin(text),
     totalTTC: extractTotal(text),
-    articles: extractArticles(text),
+    articles: isElectronique ? extractArticlesElectronique(text) : extractArticles(text),
   };
 }

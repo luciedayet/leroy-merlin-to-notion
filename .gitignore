@@ -5,3 +5,4 @@ node_modules/
 out/
 public/pdf.worker.min.mjs
 public/sw.js
+*.tsbuildinfo
