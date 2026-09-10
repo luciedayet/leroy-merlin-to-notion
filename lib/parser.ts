@@ -191,16 +191,32 @@ function extractArticles(text: string): Article[] {
 }
 
 // Format facturation électronique : chaque article est un bloc
-// "<n°>\nNom : <désignation>\nCode Fournisseur : <réf>\n...\n• Rayon : : <catégorie>
-// \n• Tx TVA : : <taux> Montant TVA : <tva> € Montant HT : <ht> €\n<prix> € <qté> Pièce(s) <taux>% <montant taxable> €"
-// (éventuellement suivi d'une remise déjà intégrée au prix affiché). Les
-// montants y sont exprimés HT (montant taxable, déjà net de remise et
-// multiplié par la quantité) + taux de TVA séparément (facture
-// professionnelle) : on recompose donc le TTC ligne à ligne à partir de
-// ces deux valeurs. Les montants HT/TVA affichés dans "Propriétés de
-// l'article" sont eux des valeurs unitaires (catalogue), PAS multipliées
-// par la quantité : ils ne doivent pas servir à calculer le total de la
-// ligne, sous peine d'ignorer la quantité dès qu'elle dépasse 1.
+// "<n°>\nNom : <désignation>\n[Description : ...]\nCode Fournisseur : <réf>\n[Bon de
+// commande : ...]\nPropriétés de l'article\n• Rayon : : <catégorie>\n• Tx TVA : :
+// <taux> Montant TVA : <tva> € Montant HT : <ht> €\n[Commentaires\n...lignes
+// d'éco-participation...]\n<prix unitaire> € <qté> Pièce(s) <taux>% <montant taxable> €"
+// (éventuellement suivi d'une remise déjà intégrée au prix affiché, elle-même
+// suivie du bloc de l'article suivant). Points d'attention retenus des vraies
+// factures :
+// - "Description :" et "Bon de commande :" sont des lignes optionnelles entre
+//   "Nom :" et "Code Fournisseur :" : il ne faut pas les agréger à la
+//   désignation (elles la dupliqueraient).
+// - le prix unitaire affiché peut avoir plus de 2 décimales (ex. "0,835 €")
+//   quand le montant taxable de la ligne ne se divise pas rond par la
+//   quantité ; un motif figé à 2 décimales fait échouer le match et fait
+//   disparaître silencieusement toute la ligne (symptôme observé : des
+//   articles à quantité > 1 manquants, donnant l'impression que la quantité
+//   "n'est pas prise en compte").
+// - "Commentaires" (éco-participation) peut s'intercaler entre les
+//   propriétés et la ligne de prix : on l'ignore simplement en continuant le
+//   parcours.
+// - le "Montant Taxable" de la ligne est déjà net de remise et multiplié par
+//   la quantité (vérifié : sa somme sur toutes les lignes correspond
+//   exactement à "MONTANT TOTAL Net HT"), donc fiable comme HT de ligne. Le
+//   "Montant TVA" du bloc propriétés est lui aussi déjà à l'échelle de la
+//   ligne (pas un montant unitaire) et correspond au calcul officiel
+//   Leroy Merlin à la ligne ; on le préfère donc à un recalcul HT×taux qui
+//   accumulerait des écarts d'arrondi sur les factures à plusieurs lignes.
 function extractArticlesElectronique(text: string): Article[] {
   const articles: Article[] = [];
   const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
@@ -216,7 +232,9 @@ function extractArticlesElectronique(text: string): Article[] {
     let designation = lines[j].replace(/^Nom\s*:\s*/, "").trim();
     j++;
     while (j < lines.length && !lines[j].startsWith("Code Fournisseur")) {
-      designation += ` ${lines[j]}`;
+      if (!/^(Description|Bon de commande)\s*:/i.test(lines[j])) {
+        designation += ` ${lines[j]}`;
+      }
       j++;
     }
 
@@ -230,6 +248,7 @@ function extractArticlesElectronique(text: string): Article[] {
     }
 
     let categorie = "";
+    let tvaAmount: number | null = null;
 
     while (j < lines.length) {
       const rayonMatch = lines[j].match(/Rayon\s*:\s*:\s*(.+)$/);
@@ -239,15 +258,22 @@ function extractArticlesElectronique(text: string): Article[] {
         continue;
       }
 
+      const tvaMatch = lines[j].match(/Montant TVA\s*:\s*([\d.,]+)\s*€/);
+      if (tvaMatch) {
+        tvaAmount = parsePrice(tvaMatch[1]);
+        j++;
+        continue;
+      }
+
       const priceRow = lines[j].match(
-        /^(\d+[.,]\d{2})\s*€\s+(\d+(?:[.,]\d+)?)\s+.+?(\d+(?:[.,]\d+)?)%\s+(\d+[.,]\d{2})\s*€$/
+        /^(\d+[.,]\d+)\s*€\s+(\d+(?:[.,]\d+)?)\s+.+?(\d+(?:[.,]\d+)?)%\s+(\d+[.,]\d{2})\s*€$/
       );
       if (priceRow) {
         const quantite = parseFloat(priceRow[2].replace(",", "."));
         const tauxTVA = parseFloat(priceRow[3].replace(",", "."));
         // Montant Taxable : total HT de la ligne, déjà net de remise et de quantité.
         const montantTaxable = parsePrice(priceRow[4]);
-        const tva = Math.round(montantTaxable * (tauxTVA / 100) * 100) / 100;
+        const tva = tvaAmount ?? Math.round(montantTaxable * (tauxTVA / 100) * 100) / 100;
         const total = Math.round((montantTaxable + tva) * 100) / 100;
 
         articles.push({
